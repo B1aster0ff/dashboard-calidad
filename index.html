@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Calidad</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <style>
+        /* Diseño general */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7f6; margin: 0; }
+        header { background: #1a202c; color: white; padding: 1.5rem 2rem; text-align: center; }
+        header h1 { margin: 0; font-size: 1.5rem; }
+        .container { padding: 2rem; max-width: 1200px; margin: auto; }
+        
+        /* Sistema de Tarjetas (Grid) */
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; }
+        .card { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); cursor: pointer; transition: all 0.2s; border: 1px solid #e2e8f0; }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px rgba(0,0,0,0.1); border-color: #cbd5e0; }
+        .card h3 { margin-top: 0; color: #2d3748; font-size: 1.25rem; border-bottom: 2px solid #edf2f7; padding-bottom: 0.5rem; }
+        .metric { font-size: 2rem; font-weight: bold; margin: 0.5rem 0; color: #1a202c; }
+        
+        /* Barras de Progreso */
+        .progress-bg { background: #edf2f7; height: 12px; border-radius: 6px; overflow: hidden; margin-bottom: 10px; }
+        .progress-bar { height: 100%; border-radius: 6px; transition: width 1s ease-in-out; }
+        
+        /* Ventana Emergente (Modal) */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; backdrop-filter: blur(3px); }
+        .modal-content { background: white; padding: 2rem; border-radius: 12px; width: 90%; max-width: 700px; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+        .close-btn { float: right; cursor: pointer; font-size: 1.5rem; color: #a0aec0; transition: color 0.2s; }
+        .close-btn:hover { color: #2d3748; }
+        
+        /* Tabla del Modal */
+        table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; }
+        th, td { border-bottom: 1px solid #e2e8f0; padding: 12px 8px; text-align: left; }
+        th { background: #f7fafc; color: #4a5568; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Panel de Control de Producción</h1>
+    </header>
+
+    <div class="container">
+        <div id="dashboard" class="grid">
+            <p style="text-align: center; width: 100%; color: #718096;">Conectando con Supabase...</p>
+        </div>
+    </div>
+
+    <div id="myModal" class="modal" onclick="closeIfOutside(event)">
+        <div class="modal-content" id="modal-box">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <h2 id="modalTitle">Detalles del Proyecto</h2>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+        // 1. Configuración de API Supabase (Usa las de tu formulario)
+        const supabaseUrl = 'https://ovpklonqsqvbbxobvuit.supabase.co';
+        const supabaseKey = 'sb_publishable_ygcr9KXg5GMiCbz-6BWK0Q_Cu_9zNXL';
+        const clienteDB = supabase.createClient(supabaseUrl, supabaseKey);
+
+        let datosGlobales = [];
+
+        // 2. Obtener los datos de la tabla 'calidad_produccion'
+        async function fetchDatos() {
+            const { data, error } = await clienteDB
+    .from('calidad_produccion')
+    .select('*')
+                .order('fecha_registro', { ascending: false });
+
+            if (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('dashboard').innerHTML = '<p style="color: red;">Error de conexión.</p>';
+                return;
+            }
+            
+            datosGlobales = data;
+            construirDashboard(data);
+        }
+
+        // 3. Procesar datos matemáticamente y crear las Tarjetas
+        function construirDashboard(data) {
+            const dashboard = document.getElementById('dashboard');
+            dashboard.innerHTML = '';
+
+            // Agrupar los registros por 'codigo_indicador'
+            const proyectos = {};
+            data.forEach(registro => {
+                if (!proyectos[registro.codigo_indicador]) {
+                    proyectos[registro.codigo_indicador] = { count: 0, sumaEficacia: 0, sumaConforme: 0, sumaTerminado: 0 };
+                }
+                proyectos[registro.codigo_indicador].count += 1;
+                proyectos[registro.codigo_indicador].sumaEficacia += registro.porcentaje_eficacia;
+                proyectos[registro.codigo_indicador].sumaConforme += registro.producto_conforme;
+                proyectos[registro.codigo_indicador].sumaTerminado += registro.producto_terminado;
+            });
+
+            // Dibujar una tarjeta por cada proyecto
+            for (const [codigo, stats] of Object.entries(proyectos)) {
+                // Calcular promedios para evitar el error de la "suma imposible"
+                const promedioEficacia = (stats.sumaEficacia / stats.count).toFixed(2);
+                
+                // Formato condicional inteligente
+                const colorBarra = promedioEficacia >= 85 ? '#48bb78' : '#e53e3e'; // Verde si aprueba, Rojo si reprueba
+
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.onclick = () => abrirModal(codigo); // Activar ventana al hacer clic
+                card.innerHTML = `
+                    <h3>Proyecto ${codigo}</h3>
+                    <div class="metric">${promedioEficacia}%</div>
+                    <div class="progress-bg">
+                        <div class="progress-bar" style="width: ${promedioEficacia}%; background-color: ${colorBarra}"></div>
+                    </div>
+                    <p style="margin: 0; font-size: 0.9em; color: #718096;">
+                        <strong>Total Conformes:</strong> ${stats.sumaConforme} / ${stats.sumaTerminado}
+                    </p>
+                `;
+                dashboard.appendChild(card);
+            }
+        }
+
+        // 4. Funciones de la Ventana Emergente
+        function abrirModal(codigo) {
+            const modal = document.getElementById('myModal');
+            const titulo = document.getElementById('modalTitle');
+            const cuerpo = document.getElementById('modalBody');
+            
+            titulo.innerText = `Historial: Proyecto ${codigo}`;
+            
+            // Filtrar los datos para mostrar solo los de este código
+            const detalles = datosGlobales.filter(d => d.codigo_indicador === codigo);
+            
+            let tablaHTML = `
+                <table>
+                    <tr>
+                        <th>Fecha de Registro</th>
+                        <th>Piezas Conformes</th>
+                        <th>Piezas Terminadas</th>
+                        <th>Eficacia Diaria</th>
+                    </tr>
+            `;
+            
+            detalles.forEach(d => {
+                const colorEficacia = d.porcentaje_eficacia >= 85 ? '#48bb78' : '#e53e3e';
+                tablaHTML += `
+                    <tr>
+                        <td>${d.fecha_registro}</td>
+                        <td>${d.producto_conforme}</td>
+                        <td>${d.producto_terminado}</td>
+                        <td style="color: ${colorEficacia}; font-weight: bold;">${d.porcentaje_eficacia}%</td>
+                    </tr>
+                `;
+            });
+            tablaHTML += `</table>`;
+            
+            cuerpo.innerHTML = tablaHTML;
+            modal.style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('myModal').style.display = 'none';
+        }
+
+        function closeIfOutside(event) {
+            if (event.target.id === 'myModal') {
+                closeModal();
+            }
+        }
+
+        // 5. Iniciar la aplicación al cargar la página
+        fetchDatos();
+    </script>
+</body>
+</html>
