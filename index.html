@@ -152,7 +152,7 @@ th { background: #f7fafc; color: #4a5568; font-weight: 600; }
             }
         }
 
-        // 4. Funciones de la Ventana Emergente
+// 4. Funciones de la Ventana Emergente
         function abrirModal(codigo) {
             const modal = document.getElementById('myModal');
             const titulo = document.getElementById('modalTitle');
@@ -163,6 +163,7 @@ th { background: #f7fafc; color: #4a5568; font-weight: 600; }
             // Filtrar los datos para mostrar solo los de este código
             const detalles = datosGlobales.filter(d => d.codigo_indicador === codigo);
             
+            // 1. Añadimos la columna "Evidencia" al encabezado de la tabla
             let tablaHTML = `
                 <table>
                     <tr>
@@ -170,17 +171,26 @@ th { background: #f7fafc; color: #4a5568; font-weight: 600; }
                         <th>Piezas Conformes</th>
                         <th>Piezas Terminadas</th>
                         <th>Eficacia Diaria</th>
+                        <th>Evidencia</th>
                     </tr>
             `;
             
             detalles.forEach(d => {
                 const colorEficacia = d.porcentaje_eficacia >= 85 ? '#48bb78' : '#e53e3e';
+                
+                // 2. Creamos un botón/enlace inteligente: 
+                // Si hay URL, mostramos el link. Si está vacío, mostramos "N/A"
+                const enlaceEvidencia = d.url_evidencia 
+                    ? `<a href="${d.url_evidencia}" target="_blank" style="color: #000000; text-decoration: underline; font-weight: bold; font-size: 0.9em;">🔗 Ver Archivo</a>` 
+                    : `<span style="color: #a0aec0; font-size: 0.9em;">Sin evidencia</span>`;
+
                 tablaHTML += `
                     <tr>
                         <td>${d.fecha_registro}</td>
                         <td>${d.producto_conforme}</td>
                         <td>${d.producto_terminado}</td>
                         <td style="color: ${colorEficacia}; font-weight: bold;">${d.porcentaje_eficacia}%</td>
+                        <td>${enlaceEvidencia}</td>
                     </tr>
                 `;
             });
